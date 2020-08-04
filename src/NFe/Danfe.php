@@ -227,7 +227,6 @@ class Danfe extends DaCommon
      * @var integer
      */
     protected $vUnComCasasDec = 4;
-
     /**
      * Configuração para determinar se irá exibir ou não informações
      * das unidades de medidas tributáveis.
@@ -250,7 +249,6 @@ class Danfe extends DaCommon
         $this->loadDoc($xml);
     }
 
-
     /**
      * Define se irá mostrar ou não dados as unidades de medidas tributaveis.
      * @param boolean $mostrarUnidadeTributavel
@@ -259,7 +257,7 @@ class Danfe extends DaCommon
     {
         $this->mostrarUnidadeTributavel = $mostrarUnidadeTributavel;
     }
-
+    
     /**
      * Define a quantidade de casas decimais para unidade comercial.
      * @param integer $vUnComCasasDec
@@ -527,11 +525,28 @@ class Danfe extends DaCommon
         $totPag = 1;
         $i = 0;
         while ($i < $this->det->length) {
-            $texto = $this->descricaoProduto($this->det->item($i));
+            $itemProd = $this->det->item($i);
+            $texto = $this->descricaoProduto($itemProd);
             $numlinhas = $this->pdf->getNumLines($texto, $w2, $fontProduto);
-            if ($this->mostrarUnidadeTributavel && $numlinhas == 1) {
-                $numlinhas = 2;
+            $mostrarUnidadeTributavel = $this->mostrarUnidadeTributavel;
+
+            if ($numlinhas == 1) {
+                // Verifica se a unidade de medida tributavel é diferente da
+                // unidade de medida do produto.
+                if (!$mostrarUnidadeTributavel) {
+                    $prod = $itemProd->getElementsByTagName('prod')->item(0);
+                    $uCom = $prod->getElementsByTagName("uCom")->item(0)->nodeValue;
+                    $uTrib = $prod->getElementsByTagName("uTrib")->item(0);
+                    if (strcmp($uCom,$uTrib->nodeValue) != 0) {
+                        $mostrarUnidadeTributavel = true;
+                    }
+                }
+
+                if ($mostrarUnidadeTributavel) {
+                    $numlinhas = 2;
+                }
             }
+
             $hUsado += round(($numlinhas * $this->pdf->fontSize) + ($numlinhas * 0.5), 2);
             if ($hUsado > $hDispo) {
                 $totPag++;
@@ -2702,7 +2717,26 @@ class Danfe extends DaCommon
 
                 // Posição y dos dados das unidades tributaveis.
                 $yTrib = $this->pdf->fontSize + .5;
-                if (!$this->mostrarUnidadeTributavel) {
+
+                $uCom = $prod->getElementsByTagName("uCom")->item(0)->nodeValue;
+                $uTrib = $prod->getElementsByTagName("uTrib")->item(0);
+                // A Configuração serve para informar se irá exibir
+                //   de forma obrigatória, estando diferente ou não,
+                //   a unidade de medida tributária.
+                // ========
+                // A Exibição será realizada sempre que a unidade comercial for
+                //   diferente da unidade de medida tributária.
+                // "Nas situações em que o valor unitário comercial for diferente do valor unitário tributável,
+                //   ambas as informações deverão estar expressas e identificadas no DANFE, podendo ser
+                //   utilizada uma das linhas adicionais previstas, ou o campo de informações adicionais."
+                // > Manual Integração - Contribuinte 4.01 - NT2009.006, Item 7.1.5, página 91.
+                $mostrarUnidadeTributavel = ($this->mostrarUnidadeTributavel
+                    || (!empty($uTrib) && strcmp($uCom, $uTrib->nodeValue)));
+
+                // Informação sobre unidade de medida tributavel.
+                // Se não for para exibir a unidade de medida tributavel, então
+                // A Escrita irá começar em 0.
+                if (!$mostrarUnidadeTributavel) {
                     $yTrib = 0;
                 }
 
@@ -2758,15 +2792,12 @@ class Danfe extends DaCommon
                 $this->pdf->textBox($x, $y, $w5, $h, $texto, $aFont, 'T', 'C', 0, '');
                 //Unidade
                 $x += $w5;
-                $texto = $prod->getElementsByTagName("uCom")->item(0)->nodeValue;
+                $texto = $uCom;
                 $this->pdf->textBox($x, $y, $w6, $h, $texto, $aFont, 'T', 'C', 0, '');
                 //Unidade de medida tributável
-                if ($this->mostrarUnidadeTributavel) {
-                    $uTrib = $prod->getElementsByTagName("uTrib")->item(0);
-                    if (!empty($uTrib)) {
-                        $texto = $uTrib->nodeValue;
-                        $this->pdf->textBox($x, $yTrib, $w6, $h, $texto, $aFont, 'T', 'C', 0, '');
-                    }
+                if ($mostrarUnidadeTributavel && !empty($uTrib)) {
+                    $texto = $uTrib->nodeValue;
+                    $this->pdf->textBox($x, $yTrib, $w6, $h, $texto, $aFont, 'T', 'C', 0, '');
                 }
                 $x += $w6;
                 if ($this->orientacao == 'P') {
@@ -2779,7 +2810,7 @@ class Danfe extends DaCommon
                 $texto = number_format($qCom->nodeValue, $this->qComCasasDec, ",", ".");
                 $this->pdf->textBox($x, $y, $w7, $h, $texto, $aFont, 'T', $alinhamento, 0, '');
                 // QTDADE Tributável
-                if ($this->mostrarUnidadeTributavel) {
+                if ($mostrarUnidadeTributavel) {
                     $qTrib = $prod->getElementsByTagName("qTrib")->item(0);
                     if (!empty($qTrib)) {
                         $texto = number_format($qTrib->nodeValue, $this->qComCasasDec, ",", ".");
@@ -2792,7 +2823,7 @@ class Danfe extends DaCommon
                 $texto = number_format($vUnCom->nodeValue, $this->vUnComCasasDec, ",", ".");
                 $this->pdf->textBox($x, $y, $w8, $h, $texto, $aFont, 'T', $alinhamento, 0, '');
                 // Valor Unitário Tributável
-                if ($this->mostrarUnidadeTributavel) {
+                if ($mostrarUnidadeTributavel) {
                     $vUnTrib = $prod->getElementsByTagName("vUnTrib")->item(0);
                     if (!empty($vUnTrib)) {
                         $texto = number_format($vUnTrib->nodeValue, $this->vUnComCasasDec, ",", ".");
